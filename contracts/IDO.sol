@@ -8,17 +8,16 @@ import "./interfaces/IUniswapRouter.sol";
 contract Crepe {
     using SafeERC20 for IERC20Metadata;
 
-
-
     struct UserInfo {
         uint256 Accumulated; // Totaly accumulated amount to be paid out in Project token
         bool Received; // Currently paid out amount to the user in Project token
     }
 
-    uint256 StartIn; 
-    uint256 EndIn;
-    uint256 TokenRate;
-    uint256 PaidOut;
+    uint256 StartIn; // начало IDO
+    uint256 EndIn; // конец IDO
+    uint256 UnlockClaimTime; // время анлока на claimToken
+    uint256 TotalAccumulated; // общее количество собранных USDC
+    uint256 TotalCrepe; // общее количество Crepe Token, которые были внесены для последующего клейма
 
     IUniswapRouter router;
     address USDC;
@@ -27,22 +26,24 @@ contract Crepe {
 
     mapping(address => bool) public AcceptedTokenList;
 
-    mapping(address => UserInfo) public users;
+    mapping(address => UserInfo) public Users;
 
-    function getRate(uint256 _USDCBalance) internal view returns (uint256 rate) {
-        uint256 crepeBalance = IERC20Metadata(crepe).balanceOf(address(this));
-        rate = _USDCBalance / crepeBalance;
+    constructor(uint256 _startTime, uint256 _endTime, uint256 _unlockClaimTime, address _crepe, address _stableToken) {
+        StartIn = _startTime;
+        EndIn = _endTime;
+        UnlockClaimTime = _unlockClaimTime;
+        crepe = _crepe;
+        USDC = _stableToken;
     }
+
 
     function joinToCampaign(address _acceptedToken, uint256 _amount) external payable {
         require(
             block.timestamp > StartIn,
             "Campaign start time has not come yet."
         );
-
         require(block.timestamp < EndIn, "Campaign time has expired.");
         uint256 balanceBefore = IERC20Metadata(USDC).balanceOf(address(this));
-        uint256 rate = getRate(balanceBefore);
         if(_acceptedToken == address(0) && msg.value > 0) { // matic
             address[] memory path = new address[](2);
             path[0] = router.WETH();
@@ -77,14 +78,21 @@ contract Crepe {
             );
         }
         uint256 amountUSDC = IERC20Metadata(USDC).balanceOf(address(this)) - balanceBefore;
-        uint256 amountToReceive = amountUSDC / rate;
-        users[msg.sender] = UserInfo({
-            Accumulated: amountToReceive, 
+        Users[msg.sender] = UserInfo({
+            Accumulated: amountUSDC, 
             Received: false
         });
+        TotalAccumulated += amountUSDC;
     }
 
-    // function claimToken() external {
-
-    // }
+    function claimToken() external {
+        require(block.timestamp > UnlockClaimTime, "The time of the unlock has not yet come");
+        require(!Users[msg.sender].Received, "Tokens claimed already");
+        uint256 share = ( Users[msg.sender].Accumulated * TotalCrepe ) / TotalAccumulated;
+        IERC20Metadata(crepe).safeTransfer(
+            msg.sender,
+            share
+        );
+        Users[msg.sender].Received = true;
+    }
 }
