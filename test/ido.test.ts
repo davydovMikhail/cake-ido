@@ -4,9 +4,9 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { BigNumber, Contract } from "ethers";
 import * as mocha from "mocha-steps";
 import { parseEther } from '@ethersproject/units';
-import { Crepe, CrepeTokenTest } from '../typechain-types';
+import { Crepe, CrepeTokenTest, IUniswapRouter } from '../typechain-types';
 
-describe("ATM test", async () => {
+describe("IDO test", async () => {
     let ido: Crepe;
     let crepeToken: CrepeTokenTest;
     let admin: SignerWithAddress;
@@ -17,6 +17,7 @@ describe("ATM test", async () => {
     let user5: SignerWithAddress;
     let user6: SignerWithAddress;
     let user7: SignerWithAddress;
+    let router: IUniswapRouter;
 
     beforeEach(async () => {
         [admin, user1, user2, user3, user4, user5, user6, user7] = await ethers.getSigners();
@@ -38,7 +39,11 @@ describe("ATM test", async () => {
     const addrUSDC = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     const addrRouter = '0xE592427A0AEce92De3Edee1F18E0157C05861564';
 
-    mocha.step('STEP1. Deploy Crepe Token', async function () {
+    mocha.step("STEP1. Initializing of Router, WETH", async function () {
+        router = <IUniswapRouter>(await ethers.getContractAt("IUniswapRouter", addrRouter));
+    });
+
+    mocha.step('STEP2. Deploy Crepe Token', async function () {
         const CrepeToken = await ethers.getContractFactory("CrepeTokenTest");
         const name = "Crepe Token Test";
         const symbol = "CTT";
@@ -49,7 +54,7 @@ describe("ATM test", async () => {
         );
     });
 
-    mocha.step('STEP2. Deploying IDO', async function () {
+    mocha.step('STEP3. Deploying IDO', async function () {
         const IDO = await ethers.getContractFactory("Crepe");
         ido = await IDO.connect(admin).deploy(
             startTime,
@@ -58,8 +63,6 @@ describe("ATM test", async () => {
             crepeToken.address,
             addrUSDC
         );
-        console.log(admin.address);
-        
     });
 
 });
