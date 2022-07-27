@@ -56,7 +56,7 @@ contract Crepe {
             address[] memory path = new address[](2);
             path[0] = router.WETH();
             path[1] = USDC;
-            router.swapExactETHForTokens{value: msg.value}(
+            router.swapExactETHForTokens{value: msg.value}( // 
                 0,
                 path,
                 address(this),
@@ -104,7 +104,7 @@ contract Crepe {
         uint256 share = (Users[msg.sender].Accumulated * TotalCrepe) /
             TotalAccumulated;
         IERC20Metadata(crepe).safeTransfer(msg.sender, share);
-        Users[msg.sender].Received = true;
+        Users[msg.sender].Received = true; // убрать
     }
 
     function addAcceptedToken(address _newToken) external {
