@@ -76,4 +76,6 @@ interface ISwapRouter is IUniswapV3SwapCallback {
         external
         payable
         returns (uint256 amountIn);
+    
+    function WETH9() external view returns (address);
 }

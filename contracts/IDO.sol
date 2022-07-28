@@ -3,15 +3,14 @@ pragma solidity =0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "./interfaces/IUniswapRouter.sol";
+import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IWETH9.sol";
+
+import "hardhat/console.sol";
 
 contract Crepe {
     using SafeERC20 for IERC20Metadata;
 
-    struct UserInfo {
-        uint256 Accumulated; // Totaly accumulated amount to be paid out in Project token
-        bool Received; // Currently paid out amount to the user in Project token
-    }
 
     uint256 StartIn; // начало IDO
     uint256 EndIn; // конец IDO
@@ -19,29 +18,37 @@ contract Crepe {
     uint256 TotalAccumulated; // общее количество собранных USDC
     uint256 TotalCrepe; // общее количество Crepe Token, которые были внесены для последующего клейма
 
-    IUniswapRouter router;
+    ISwapRouter public immutable router;
+    IWETH9 public immutable WETH;
+
     address USDC;
     address crepe;
 
     mapping(address => bool) public AcceptedTokenList;
 
-    mapping(address => UserInfo) public Users;
+    mapping(address => uint256) public Users;
 
     constructor(
         uint256 _startTime,
         uint256 _endTime,
         uint256 _unlockClaimTime,
         address _crepe,
-        address _stableToken
+        address _stableToken,
+        address _router
     ) {
         StartIn = _startTime;
         EndIn = _endTime;
         UnlockClaimTime = _unlockClaimTime;
         crepe = _crepe;
         USDC = _stableToken;
+        router = ISwapRouter(_router);
+        address payable wethAddress = payable(router.WETH9());
+        WETH = IWETH9(wethAddress);
+        uint256 currentTime = block.timestamp;
+        console.log(currentTime);
     }
 
-    function joinToCampaign(address _acceptedToken, uint256 _amount)
+    function joinToCampaign(address _acceptedToken, uint256 _amountIn, uint256 _amountOutMin)
         external
         payable
     {
@@ -52,46 +59,49 @@ contract Crepe {
         require(block.timestamp < EndIn, "Campaign time has expired.");
         uint256 balanceBefore = IERC20Metadata(USDC).balanceOf(address(this));
         if (_acceptedToken == address(0) && msg.value > 0) {
-            // matic
-            address[] memory path = new address[](2);
-            path[0] = router.WETH();
-            path[1] = USDC;
-            router.swapExactETHForTokens{value: msg.value}( // 
-                0,
-                path,
-                address(this),
-                block.timestamp + 30
-            );
-        } else if (AcceptedTokenList[_acceptedToken]) {
-            // wbtc, weth
+            WETH.deposit{ value: msg.value }();
+            WETH.approve(address(router), msg.value);
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(WETH),
+                tokenOut: USDC,
+                fee: 3000, // pool fee 0.3%
+                recipient: address(this),
+                deadline: block.timestamp + 20,
+                amountIn: msg.value,
+                amountOutMinimum: _amountOutMin,
+                sqrtPriceLimitX96: 0
+            });
+            router.exactInputSingle(params);
+        } else if (AcceptedTokenList[_acceptedToken]) { // wbtc, weth
             IERC20Metadata(_acceptedToken).safeTransferFrom(
                 msg.sender,
                 address(this),
-                _amount
+                _amountIn
             );
-            address[] memory path = new address[](2);
-            path[0] = _acceptedToken;
-            path[1] = USDC;
-            router.swapExactTokensForTokens(
-                _amount,
-                0,
-                path,
-                address(this),
-                block.timestamp + 30
+            IERC20Metadata(_acceptedToken).safeApprove(
+                address(router),
+                _amountIn
             );
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+                tokenIn: _acceptedToken,
+                tokenOut: USDC,
+                fee: 3000, // pool fee 0.3%
+                recipient: address(this),
+                deadline: block.timestamp + 20,
+                amountIn: _amountIn,
+                amountOutMinimum: _amountOutMin,
+                sqrtPriceLimitX96: 0
+            });
+            router.exactInputSingle(params);
         } else if (_acceptedToken == USDC) {
             IERC20Metadata(_acceptedToken).safeTransferFrom(
                 msg.sender,
                 address(this),
-                _amount
+                _amountIn
             );
         }
-        uint256 amountUSDC = IERC20Metadata(USDC).balanceOf(address(this)) -
-            balanceBefore;
-        Users[msg.sender] = UserInfo({
-            Accumulated: amountUSDC,
-            Received: false
-        });
+        uint256 amountUSDC = IERC20Metadata(USDC).balanceOf(address(this)) - balanceBefore;
+        Users[msg.sender] += amountUSDC; 
         TotalAccumulated += amountUSDC;
     }
 
@@ -100,11 +110,11 @@ contract Crepe {
             block.timestamp > UnlockClaimTime,
             "The time of the unlock has not yet come"
         );
-        require(!Users[msg.sender].Received, "Tokens claimed already");
-        uint256 share = (Users[msg.sender].Accumulated * TotalCrepe) /
+        require(Users[msg.sender] > 0, "Tokens claimed already");
+        uint256 share = (Users[msg.sender] * TotalCrepe) /
             TotalAccumulated;
         IERC20Metadata(crepe).safeTransfer(msg.sender, share);
-        Users[msg.sender].Received = true; // убрать
+        Users[msg.sender] = 0; // убрать
     }
 
     function addAcceptedToken(address _newToken) external {
