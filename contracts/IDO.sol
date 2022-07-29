@@ -44,8 +44,8 @@ contract Crepe {
         router = ISwapRouter(_router);
         address payable wethAddress = payable(router.WETH9());
         WETH = IWETH9(wethAddress);
-        uint256 currentTime = block.timestamp;
-        console.log(currentTime);
+        // uint256 currentTime = block.timestamp;
+        // console.log(currentTime);
     }
 
     function joinToCampaign(address _acceptedToken, uint256 _amountIn, uint256 _amountOutMin)
@@ -57,8 +57,10 @@ contract Crepe {
             "Campaign start time has not come yet."
         );
         require(block.timestamp < EndIn, "Campaign time has expired.");
+        require(AcceptedTokenList[_acceptedToken], "Invalid payment token.");
         uint256 balanceBefore = IERC20Metadata(USDC).balanceOf(address(this));
-        if (_acceptedToken == address(0) && msg.value > 0) {
+        if (_acceptedToken == address(0)) {
+            require(msg.value > 0, 'You sent 0 MATIC');
             WETH.deposit{ value: msg.value }();
             WETH.approve(address(router), msg.value);
             ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
@@ -72,7 +74,13 @@ contract Crepe {
                 sqrtPriceLimitX96: 0
             });
             router.exactInputSingle(params);
-        } else if (AcceptedTokenList[_acceptedToken]) { // wbtc, weth
+        } else if (_acceptedToken == USDC) { // wbtc, weth
+            IERC20Metadata(_acceptedToken).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _amountIn
+            );
+        } else {
             IERC20Metadata(_acceptedToken).safeTransferFrom(
                 msg.sender,
                 address(this),
@@ -93,17 +101,15 @@ contract Crepe {
                 sqrtPriceLimitX96: 0
             });
             router.exactInputSingle(params);
-        } else if (_acceptedToken == USDC) {
-            IERC20Metadata(_acceptedToken).safeTransferFrom(
-                msg.sender,
-                address(this),
-                _amountIn
-            );
         }
         uint256 amountUSDC = IERC20Metadata(USDC).balanceOf(address(this)) - balanceBefore;
         Users[msg.sender] += amountUSDC; 
         TotalAccumulated += amountUSDC;
     }
+
+
+
+
 
     function claimToken() external {
         require(
