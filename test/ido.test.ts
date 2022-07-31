@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import {  Contract } from "ethers";
+import { Contract } from "ethers";
 import * as mocha from "mocha-steps";
 import { parseEther } from '@ethersproject/units';
 import { Crepe, CrepeTokenTest, ISwapRouter, IERC20Metadata, IWETH9 } from '../typechain-types';
@@ -196,13 +196,51 @@ describe("IDO test", async () => {
         const balanceUser2 = await USDC.balanceOf(user2.address);
         await USDC.connect(user1).approve(ido.address, balanceUser1);
         await USDC.connect(user2).approve(ido.address, balanceUser2);
-
         await expect(ido.connect(user7).joinToCampaign(user1.address, parseEther('100'), parseEther('0'))).to.be.revertedWith('Invalid payment token.');
-
         await ido.connect(user1).joinToCampaign(USDC.address, balanceUser1, 0);
         await ido.connect(user2).joinToCampaign(USDC.address, balanceUser2, 0);
         expect(await USDC.balanceOf(ido.address)).eq(balanceUser1.add(balanceUser2));
     });
 
+    mocha.step('STEP9. Purchase for WBTC', async function () {
+        const balanceUser3 = await WBTC.balanceOf(user3.address);
+        const balanceUser4 = await WBTC.balanceOf(user4.address);
+        const balanceIDOBefore = await USDC.balanceOf(ido.address);
+        await WBTC.connect(user3).approve(ido.address, balanceUser3);
+        await WBTC.connect(user4).approve(ido.address, balanceUser4);
+        await ido.connect(user3).joinToCampaign(WBTC.address, balanceUser3, 0);
+        await ido.connect(user4).joinToCampaign(WBTC.address, balanceUser4, 0);
+        const balanceIDOAfter = await USDC.balanceOf(ido.address);
+        console.log('Balance USDC before:', balanceIDOBefore);
+        console.log('Balance USDC after:', balanceIDOAfter);        
+    });
 
+    mocha.step('STEP9. Purchase for WETH', async function () {
+        const balanceUser5 = await WETH.balanceOf(user5.address);
+        const balanceUser6 = await WETH.balanceOf(user6.address);
+        const balanceIDOBefore = await USDC.balanceOf(ido.address);
+        await WETH.connect(user5).approve(ido.address, balanceUser5);
+        await WETH.connect(user6).approve(ido.address, balanceUser6);
+        await ido.connect(user5).joinToCampaign(WETH.address, balanceUser5, 0);
+        await ido.connect(user6).joinToCampaign(WETH.address, balanceUser6, 0);
+        const balanceIDOAfter = await USDC.balanceOf(ido.address);
+        console.log('Balance USDC before:', balanceIDOBefore);
+        console.log('Balance USDC after:', balanceIDOAfter);        
+    });
+
+    mocha.step('STEP10. Purchase for MATIC', async function () {
+        const balanceIDOBefore = await USDC.balanceOf(ido.address);
+        await expect(ido.connect(user7).joinToCampaign(nullAddress, parseEther('100'), 0)).to.be.revertedWith('You sent 0 MATIC');
+        await ido.connect(user7).joinToCampaign(nullAddress, parseEther('7500'), 0, { value: parseEther('7500') });
+        await ido.connect(user8).joinToCampaign(nullAddress, parseEther('7500'), 0, { value: parseEther('7500') });
+        const balanceIDOAfter = await USDC.balanceOf(ido.address);
+        console.log('Balance USDC before:', balanceIDOBefore);
+        console.log('Balance USDC after:', balanceIDOAfter);        
+    });
+
+    mocha.step('STEP11. Finishing IDO', async function () {
+        await ethers.provider.send("evm_increaseTime", [1000]);
+        await ethers.provider.send("evm_mine", []);
+        await expect(ido.connect(user7).joinToCampaign(nullAddress, parseEther('0'), parseEther('0'), { value: parseEther('500') })).to.be.revertedWith('Campaign time has expired.');
+    });
 });
