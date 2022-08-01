@@ -1,11 +1,11 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { Contract } from "ethers";
+import { BigNumber, Contract } from "ethers";
 import * as mocha from "mocha-steps";
 import { parseEther } from '@ethersproject/units';
 import { Crepe, CrepeTokenTest, ISwapRouter, IERC20Metadata, IWETH9 } from '../typechain-types';
-import BigNumber from "bignumber.js";
+import Big_Number from "bignumber.js";
 
 describe("IDO test", async () => {
     let ido: Crepe;
@@ -43,7 +43,7 @@ describe("IDO test", async () => {
     // const startTime = currentTimestamp + 100;
     // const endTime = startTime + 1000;
     // const unlockTimestamp = endTime + 1000;
-    const totalSupplyCrepe = 1000_000;
+    const totalSupplyCrepe = 10_000_011;
 
     const tokensAddresses = {
         USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
@@ -63,13 +63,17 @@ describe("IDO test", async () => {
     }
 
     async function plusDecimals(num: any, dec: any) {
-        const value = new BigNumber(num.toString()).shiftedBy(+dec).toString();
+        const value = new Big_Number(num.toString()).shiftedBy(+dec).toString();
         return value;
     }
 
     async function minusDecimals(num: any, dec: any) {
-        const value = new BigNumber(num.toString()).shiftedBy(-dec).toString();
+        const value = new Big_Number(num.toString()).shiftedBy(-dec).toString();
         return value;
+    }
+
+    function toWei(amount: number, decimals: number): BigNumber {
+        return ethers.utils.parseUnits(amount.toString(), decimals);
     }
 
     async function getParams(tokenIn: string, tokenOut: string, recipient: string, _amountIn: number) {
@@ -96,6 +100,11 @@ describe("IDO test", async () => {
         decUSDC = await USDC.decimals();
         decWBTC = await WBTC.decimals();
         decWETH = await WETH.decimals();
+        const decWMATIC = await WMATIC.decimals();
+        console.log('Decimals USDC', decUSDC);
+        console.log('Decimals WBTC', decWBTC);
+        console.log('Decimals WETH', decWETH);
+        console.log('Decimals WMATIC', decWMATIC);
     });
 
     mocha.step('STEP2. Purchase of WBTC, WETH and USDC for MATIC', async function () {
@@ -148,10 +157,12 @@ describe("IDO test", async () => {
         const CrepeToken = await ethers.getContractFactory("CrepeTokenTest");
         const name = "Crepe Token Test";
         const symbol = "CTT";
+        const crepeDecimals = 6;
+        const totalSupplyCrepeWei = toWei(totalSupplyCrepe, crepeDecimals);
         crepeToken = await CrepeToken.connect(admin).deploy(
             name,
             symbol,
-            parseEther(totalSupplyCrepe.toString())
+            totalSupplyCrepeWei
         );
     });
 
@@ -215,7 +226,7 @@ describe("IDO test", async () => {
         console.log('Balance USDC after:', balanceIDOAfter);        
     });
 
-    mocha.step('STEP9. Purchase for WETH', async function () {
+    mocha.step('STEP10. Purchase for WETH', async function () {
         const balanceUser5 = await WETH.balanceOf(user5.address);
         const balanceUser6 = await WETH.balanceOf(user6.address);
         const balanceIDOBefore = await USDC.balanceOf(ido.address);
@@ -228,7 +239,7 @@ describe("IDO test", async () => {
         console.log('Balance USDC after:', balanceIDOAfter);        
     });
 
-    mocha.step('STEP10. Purchase for MATIC', async function () {
+    mocha.step('STEP11. Purchase for MATIC', async function () {
         const balanceIDOBefore = await USDC.balanceOf(ido.address);
         await expect(ido.connect(user7).joinToCampaign(nullAddress, parseEther('100'), 0)).to.be.revertedWith('You sent 0 MATIC');
         await ido.connect(user7).joinToCampaign(nullAddress, parseEther('7500'), 0, { value: parseEther('7500') });
@@ -238,9 +249,42 @@ describe("IDO test", async () => {
         console.log('Balance USDC after:', balanceIDOAfter);        
     });
 
-    mocha.step('STEP11. Finishing IDO', async function () {
+    mocha.step('STEP12. Finishing IDO', async function () {
         await ethers.provider.send("evm_increaseTime", [1000]);
         await ethers.provider.send("evm_mine", []);
         await expect(ido.connect(user7).joinToCampaign(nullAddress, parseEther('0'), parseEther('0'), { value: parseEther('500') })).to.be.revertedWith('Campaign time has expired.');
     });
+
+    mocha.step('STEP13. Approving campaign', async function () {
+        const crepeDecimals = await crepeToken.decimals();
+        console.log('crepeDecimals', crepeDecimals);
+        
+        const approveAmount = toWei(totalSupplyCrepe, crepeDecimals);
+        await crepeToken.connect(admin).approve(ido.address, approveAmount);
+        await ido.connect(admin).approveCampaign(admin.address, approveAmount);
+        expect(await crepeToken.balanceOf(ido.address)).eq(approveAmount);
+    });
+
+    mocha.step('STEP14. Start claiming Crepe tokens', async function () {
+        await expect(ido.connect(user7).claimToken()).to.be.revertedWith('The time of the unlock has not yet come');
+        await ethers.provider.send("evm_increaseTime", [1000]);
+        await ethers.provider.send("evm_mine", []);
+    });
+
+    mocha.step('STEP15. Claiming Crepe tokens', async function () {
+        await ido.connect(user1).claimToken();
+        await expect(ido.connect(user1).claimToken()).to.be.revertedWith('Tokens claimed already');
+        await ido.connect(user2).claimToken();
+        await ido.connect(user3).claimToken();
+        await ido.connect(user4).claimToken();
+        await ido.connect(user5).claimToken();
+        await ido.connect(user6).claimToken();
+        await ido.connect(user7).claimToken();
+        await ido.connect(user8).claimToken();
+        await expect(ido.connect(user8).claimToken()).to.be.revertedWith('Tokens claimed already');
+
+        const remainder = await crepeToken.balanceOf(ido.address);
+        console.log("Crepe token's remainder", remainder);
+        
+    })
 });

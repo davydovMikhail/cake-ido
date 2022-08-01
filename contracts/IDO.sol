@@ -43,8 +43,6 @@ contract Crepe {
         router = ISwapRouter(_router);
         address payable wethAddress = payable(router.WETH9());
         WETH = IWETH9(wethAddress);
-        // uint256 currentTime = block.timestamp;
-        // console.log(currentTime);
     }
 
     function joinToCampaign(
@@ -61,8 +59,8 @@ contract Crepe {
         uint256 balanceBefore = IERC20Metadata(USDC).balanceOf(address(this));
         if (_acceptedToken == address(0)) {
             require(msg.value > 0, "You sent 0 MATIC");
-            WETH.deposit{value: msg.value}();
-            WETH.approve(address(router), msg.value);
+            // WETH.deposit{value: msg.value}();
+            // WETH.approve(address(router), msg.value);
             ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
                 .ExactInputSingleParams({
                     tokenIn: address(WETH),
@@ -74,9 +72,8 @@ contract Crepe {
                     amountOutMinimum: _amountOutMin,
                     sqrtPriceLimitX96: 0
                 });
-            router.exactInputSingle(params);
+            router.exactInputSingle{value: msg.value}(params);
         } else if (_acceptedToken == USDC) {
-            // wbtc, weth
             IERC20Metadata(_acceptedToken).safeTransferFrom(
                 msg.sender,
                 address(this),
@@ -126,7 +123,7 @@ contract Crepe {
         AcceptedTokenList[_newToken] = !AcceptedTokenList[_newToken];
     }
 
-    function approveCampaign(address _sender, address _amount) external {
+    function approveCampaign(address _sender, uint256 _amount) external {
         IERC20Metadata(crepe).safeTransferFrom(_sender, address(this), _amount);
         TotalCrepe += _amount;
     }

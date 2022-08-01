@@ -12,4 +12,9 @@ contract CrepeTokenTest is ERC20 {
     ) ERC20(_name, _symbol) {
         _mint(msg.sender, _initialSupply);
     }
+
+    function decimals() public view virtual override(ERC20) returns (uint8) {
+        return 6;
+    }
+
 }
