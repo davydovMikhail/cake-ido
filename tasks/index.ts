@@ -1,2 +1,3 @@
-import './add-accepted-token.ts';
-import './join-to-campaign.ts';
+import './change-accepted-token.ts';
+import './participate.ts';
+import './grant-role.ts';
